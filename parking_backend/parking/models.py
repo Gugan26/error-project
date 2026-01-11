@@ -17,6 +17,7 @@ class Reservation(models.Model):
     start_time = models.TimeField()
     end_time = models.TimeField()
     duration_hours = models.FloatField()
+    is_scanned = models.BooleanField(default=False)
 
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -68,6 +68,34 @@ export function ReservationPanel({
     return () => stopWebcam();
   }, [isOpen, spotId, spotType]);
 
+// ReservationPanel function kulla...
+useEffect(() => {
+  let interval;
+
+  // QR image display-la iruntha mattum check panna aarambikum
+  if (qrImage) {
+    interval = setInterval(async () => {
+      try {
+        const response = await API.get(`check-scan-status/${spotId}/`);
+        
+        if (response.data.is_scanned === true) {
+          alert("QR Scanned Successfully! Closing Panel...");
+          clearInterval(interval);
+          onClose(); // Inga thaan unga panel close aaguthu
+          
+          // Optional: State-a clear panna
+          setQrImage(null);
+          setStep(1);
+        }
+      } catch (error) {
+        console.error("Scanning error:", error);
+      }
+    }, 2000); // 2 seconds-ku oru vaati check pannum
+  }
+
+  return () => clearInterval(interval); // Component close aana stop aagidum
+}, [qrImage, spotId, onClose]);
+
   const handleReservationSubmit = async (e) => {
     e.preventDefault();
     if (!spotId) return;
@@ -106,7 +134,7 @@ export function ReservationPanel({
         spot_id: spotId, email: formData.email, password: formData.password,
       });
       alert(response.data.success);
-      if (response.data.qr) setQrImage(`http://127.0.0.1:8000/${response.data.qr}`);
+      if (response.data.qr)  setQrImage(`http://127.0.0.1:8000/${response.data.qr}?t=${new Date().getTime()}`);
       else { onCancel(spotId, spotType); onClose(); }
     } catch (error) {
       alert(error.response?.data?.error || "Cancel failed");

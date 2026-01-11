@@ -1,9 +1,9 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
+from django.shortcuts import get_object_or_404
 from .models import Reservation, MonthlyPass, YearlyPass
 from .serializers import ReservationSerializer, MonthlyPassSerializer, YearlyPassSerializer, EmployeeSerializer
-from django.contrib.auth.hashers import check_password
 from .qr import generate_qr
 
 @api_view(['POST'])
@@ -31,7 +31,7 @@ def create_yearly_pass(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 # -----------------------------
-# CANCEL RESERVATION (safe version)
+# CANCEL RESERVATION (Step 1: Generate QR)
 # -----------------------------
 @api_view(['POST'])
 def cancel_reservation(request):
@@ -41,65 +41,63 @@ def cancel_reservation(request):
         password = request.data.get('password', '')
 
         if not spot_id or not email or not password:
-            return Response(
-                {"error": "All fields are required."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({"error": "All fields are required."}, status=status.HTTP_400_BAD_REQUEST)
 
-        res_query = Reservation.objects.filter(
-            spot_id=spot_id,
-            email__iexact=email
-        )
+        res_query = Reservation.objects.filter(spot_id=spot_id, email__iexact=email)
 
         if not res_query.exists():
-            return Response(
-                {"error": "No reservation found for this email at this spot."},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            return Response({"error": "No reservation found."}, status=status.HTTP_404_NOT_FOUND)
 
         target_res = res_query.filter(password=password).first()
-
         if not target_res:
-            return Response(
-                {"error": "Incorrect password. Cancellation denied."},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+            return Response({"error": "Incorrect password."}, status=status.HTTP_401_UNAUTHORIZED)
 
+        # PASS HOLDER CHECK (No QR needed for them as per your old logic)
         is_monthly = MonthlyPass.objects.filter(email__iexact=email).exists()
         is_yearly = YearlyPass.objects.filter(email__iexact=email).exists()
 
-        target_res.delete()
+        if is_yearly or is_monthly:
+            target_res.delete() # Pass holders-ku direct delete
+            return Response({"success": "Cancelled. Pass holder verified!", "qr": None})
 
-        if is_yearly:
-            message = "Reservation cancelled. Thanks for being a Yearly Pass holder!"
-            qr_file = None
-
-        elif is_monthly:
-            message = "Reservation cancelled. Thanks for being a Monthly Pass holder!"
-            qr_file = None
-
-        else:
-            message = "Reservation cancelled successfully!"
-            qr_file = generate_qr(
-                data=message,
-                file_name="reservation_cancelled.png"
-            )
-
-        return Response(
-            {
-                "success": message,
-                "qr": qr_file
-            },
-            status=status.HTTP_200_OK
-        )
+        # NORMAL USER: Generate QR for confirmation
+        qr_file_path = generate_qr(spot_id) # qr.py function call
+        
+        return Response({
+            "success": "Please scan the QR code to confirm cancellation.",
+            "qr": qr_file_path
+        }, status=status.HTTP_200_OK)
 
     except Exception as e:
-        print("Error:", e)
-        return Response(
-            {"error": "Internal Server Error"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
+        return Response({"error": str(e)}, status=500)
+
+# -----------------------------
+# SCANNER ENDPOINT (Step 2: Mobile Scanner hits this)
+# -----------------------------
+@api_view(['GET', 'POST'])
+def mark_as_scanned(request, spot_id):
+    try:
+        res = Reservation.objects.get(spot_id=spot_id)
+        res.is_scanned = True
+        res.save()
+        return Response("<h1>Scan Success! Your reservation is now marked for cancellation.</h1>")
+    except Reservation.DoesNotExist:
+        return Response("<h1>Error: Reservation not found or already deleted.</h1>", status=404)
+
+# -----------------------------
+# POLLING ENDPOINT (Step 3: Frontend keeps asking this)
+# -----------------------------
+@api_view(['GET'])
+def check_scan_status(request, spot_id):
+    res = Reservation.objects.filter(spot_id=spot_id).first()
     
+    if res and res.is_scanned:
+        # Status True aagiduchu, so ippo safe-ah delete pannalaam
+        res.delete() 
+        return Response({"is_scanned": True})
+    
+    return Response({"is_scanned": False})
+
 @api_view(['POST'])
 def create_employee(request):
     serializer = EmployeeSerializer(data=request.data)

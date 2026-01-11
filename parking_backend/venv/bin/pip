@@ -1,4 +1,4 @@
-#!/home/gugan/Documents/Internship/parking_backend/venv/bin/python3
+#!/home/gugan/Documents/Internship/error-project/parking_backend/venv/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys
