@@ -76,16 +76,25 @@ useEffect(() => {
   if (qrImage) {
     interval = setInterval(async () => {
       try {
-        const response = await API.get(`check-scan-status/${spotId}/`);
+        const response = await API.get(`check_scan_status/${spotId}/`);
         
-        if (response.data.is_scanned === true) {
+        {/*if (response.data.is_scanned === true) {
           alert("QR Scanned Successfully! Closing Panel...");
           clearInterval(interval);
           onClose(); // Inga thaan unga panel close aaguthu
           
           // Optional: State-a clear panna
-          setQrImage(null);
+          setQrImage(null);check_scan_status
           setStep(1);
+        }*/}
+        if (response.data.is_scanned === true) {
+          console.log("Scan detected!");
+          clearInterval(interval);
+          alert("QR Scanned Successfully!");
+          
+          // Ippo backend-la record delete aayiduchu, so panel-ah close panrom
+          onCancel(spotId, spotType); 
+          onClose(); 
         }
       } catch (error) {
         console.error("Scanning error:", error);

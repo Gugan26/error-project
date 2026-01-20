@@ -74,27 +74,39 @@ def cancel_reservation(request):
 # -----------------------------
 # SCANNER ENDPOINT (Step 2: Mobile Scanner hits this)
 # -----------------------------
-@api_view(['GET', 'POST'])
+@api_view(['GET']) # POST thevaiyillai
 def mark_as_scanned(request, spot_id):
     try:
-        res = Reservation.objects.get(spot_id=spot_id)
-        res.is_scanned = True
-        res.save()
-        return Response("<h1>Scan Success! Your reservation is now marked for cancellation.</h1>")
-    except Reservation.DoesNotExist:
-        return Response("<h1>Error: Reservation not found or already deleted.</h1>", status=404)
-
+        # Latest active reservation-ah eduthu is_scanned update panrom
+        res = Reservation.objects.filter(spot_id=spot_id, is_scanned=False).last()
+        
+        if res:
+            res.is_scanned = True
+            res.save()
+            # Mobile-la scan pannavangaluku intha message mattum theriyum
+            return Response("<h1>Scan Success! Reservation marked for cancellation.</h1>")
+        
+        return Response("<h1>Already scanned or No active reservation found.</h1>")
+    except Exception as e:
+        return Response(f"<h1>Error: {str(e)}</h1>", status=500)
 # -----------------------------
 # POLLING ENDPOINT (Step 3: Frontend keeps asking this)
 # -----------------------------
+# views.py
 @api_view(['GET'])
 def check_scan_status(request, spot_id):
-    res = Reservation.objects.filter(spot_id=spot_id).first()
+    # active-ah irukura record, mobile-la scan aanatha mattum edukkurom
+    res = Reservation.objects.filter(spot_id=spot_id, is_scanned=True).first()
     
-    if res and res.is_scanned:
-        # Status True aagiduchu, so ippo safe-ah delete pannalaam
-        res.delete() 
-        return Response({"is_scanned": True})
+    if res:
+        # Success message-ah variable-la vechikonga
+        data = {"is_scanned": True}
+        
+        # Database-la irunthu antha record-ah delete pannidunga (Very Important)
+        res.delete()
+        
+        # Ippo Response anupunga
+        return Response(data)
     
     return Response({"is_scanned": False})
 

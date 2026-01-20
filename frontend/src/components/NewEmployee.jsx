@@ -1,4 +1,3 @@
-
 import React, { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
@@ -15,6 +14,10 @@ export default function NewEmployee() {
   const [loading, setLoading] = useState(false);
   const [stream, setStream] = useState(null);
   
+  // Photo capture pannurathukana States
+  const [photo, setPhoto] = useState(null); 
+  const [previewUrl, setPreviewUrl] = useState(null);
+
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -28,8 +31,9 @@ export default function NewEmployee() {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  // Purely Visual Webcam Logic (No Backend processing)
+  // Webcam Start
   const startWebcam = async () => {
+    setPreviewUrl(null); // Retake pannum pothu preview clear panna
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: true,
@@ -41,6 +45,23 @@ export default function NewEmployee() {
       setStream(mediaStream);
     } catch (err) {
       alert("Camera access denied or not found.");
+    }
+  };
+
+  // Photo Capture Logic
+  const capturePhoto = () => {
+    if (videoRef.current) {
+      const canvas = document.createElement("canvas");
+      canvas.width = videoRef.current.videoWidth;
+      canvas.height = videoRef.current.videoHeight;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(videoRef.current, 0, 0);
+      
+      canvas.toBlob((blob) => {
+        setPhoto(blob); // Database-ku anupa (File)
+        setPreviewUrl(URL.createObjectURL(blob)); // UI-la preview kaata
+        stopWebcam();
+      }, "image/jpeg");
     }
   };
 
@@ -61,15 +82,27 @@ export default function NewEmployee() {
     setStep((p) => p - 1);
   };
 
+  // Final Submit with Image
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+
+    // FormData object creation
+    const data = new FormData();
+    Object.keys(formData).forEach((key) => {
+      data.append(key, formData[key]);
+    });
+
+    // Capture panna photo-va add panrom
+    if (photo) {
+      data.append("profile_pic", photo, "employee_photo.jpg");
+    }
+
     try {
-      // Inga formData matum thaan poguthu, No Camera Data
       const response = await fetch("http://localhost:8000/api/new-employee/", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        // Note: Content-Type header poda koodathu
+        body: data,
       });
 
       if (response.ok) {
@@ -134,7 +167,7 @@ export default function NewEmployee() {
                     <input type="tel" name="phone" value={formData.phone} onChange={handleChange} placeholder="987..." required className={inputStyle} />
                   </div>
                   <div>
-                    <label className={labelStyle}><Fingerprint size={12}/> EMP ID</label>
+                    <label className={labelStyle}><Fingerprint size={12}/> Adhar Number</label>
                     <input name="employee_id" value={formData.employee_id} onChange={handleChange} placeholder="E-01" required className={inputStyle} />
                   </div>
                 </div>
@@ -144,28 +177,38 @@ export default function NewEmployee() {
               </motion.div>
             )}
 
-            {/* STEP 2: Identity Verification (Template Only) */}
+            {/* STEP 2: Identity Verification (Corrected with Capture) */}
             {step === 2 && (
               <motion.div key="step2" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="space-y-4">
                 <label className={labelStyle}><Camera size={12}/> Identity Scan</label>
                 <div className="relative overflow-hidden rounded-2xl bg-black aspect-video flex items-center justify-center border-4 border-white shadow-inner">
-                  {!stream && (
-                    <div className="text-center">
-                      <p className="text-gray-500 text-[10px] uppercase font-bold px-4">Camera Preview Off</p>
-                    </div>
+                  {previewUrl ? (
+                    <img src={previewUrl} className="w-full h-full object-cover" alt="Captured" />
+                  ) : (
+                    <>
+                      {!stream && (
+                        <div className="text-center">
+                          <p className="text-gray-500 text-[10px] uppercase font-bold px-4">Camera Preview Off</p>
+                        </div>
+                      )}
+                      <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+                    </>
                   )}
-                  <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
                   {stream && <div className="absolute inset-0 border-2 border-dashed border-yellow-400/30 rounded-2xl animate-pulse" />}
                 </div>
                 
                 <div className="flex gap-3">
-                  {!stream ? (
+                  {!stream && !previewUrl ? (
                     <button type="button" onClick={startWebcam} className="flex-1 py-3 rounded-xl bg-white border border-gray-200 text-gray-700 text-xs font-bold flex items-center justify-center gap-2 shadow-sm">
                       <Camera size={14} /> Open Camera
                     </button>
+                  ) : stream ? (
+                    <button type="button" onClick={capturePhoto} className="flex-1 py-3 rounded-xl bg-yellow-400 text-gray-900 text-xs font-bold flex items-center justify-center gap-2 shadow-sm">
+                      <CheckCircle size={14} /> Capture Photo
+                    </button>
                   ) : (
-                    <button type="button" onClick={stopWebcam} className="flex-1 py-3 rounded-xl bg-red-50 text-red-600 text-xs font-bold flex items-center justify-center gap-2 shadow-sm">
-                      <VideoOff size={14} /> Close
+                    <button type="button" onClick={startWebcam} className="flex-1 py-3 rounded-xl bg-gray-200 text-gray-700 text-xs font-bold flex items-center justify-center gap-2 shadow-sm">
+                      <VideoOff size={14} /> Retake
                     </button>
                   )}
                 </div>
@@ -199,7 +242,7 @@ export default function NewEmployee() {
                     className="w-full py-4 rounded-xl font-black text-xs text-gray-900 uppercase tracking-widest bg-yellow-400 shadow-[0_8px_15px_rgba(250,204,21,0.3)] flex items-center justify-center gap-2 disabled:bg-gray-300"
                   >
                     {loading ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle size={18} />}
-                    {loading ? "Processing..." : "Submit"}
+                    {loading ? "Processing..." : "Complete Registration"}
                   </button>
                 </div>
               </motion.div>
